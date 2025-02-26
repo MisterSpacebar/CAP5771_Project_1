@@ -307,8 +307,6 @@ def load_transactions_from_file(filename):
     transactions = list(transaction_dict.values())
     return transactions
 
-
-# Example usage with the provided dataset
 if __name__ == "__main__":
     # Load transactions from file
     transactions = load_transactions_from_file('small.txt')
