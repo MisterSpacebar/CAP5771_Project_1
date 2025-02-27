@@ -4,27 +4,25 @@ class Apriori:
         Initialize the Apriori algorithm with minimum support and confidence thresholds.
 
         Parameters:
-        min_support (float): The minimum support threshold.
-        min_confidence (float): The minimum confidence threshold.
-
-        Output:
-        None
+        min_support (int): The minimum support threshold as absolute count.
+        min_confidence (float): The minimum confidence threshold (0-1).
         """
-        self.min_support = min_support
+        self.min_support = min_support  # Absolute count, not percentage
         self.min_confidence = min_confidence
-        self.frequent_itemsets = {}  # Dictionary to store frequent itemsets with their support counts, organized by size
+        self.frequent_itemsets = {}  # Dictionary to store frequent itemsets with their support counts
         self.rules = []  # List to store generated association rules
+        self.transaction_count = 0  # Total number of transactions
 
     def generate_candidates(self, prev_frequent_itemsets, k):
         """
-        Generate candidate itemsets of size k from previous frequent itemsets.
+        Generate candidate itemsets of size k from frequent itemsets of size k-1.
 
         Parameters:
-        prev_frequent_itemsets (set of frozensets): Frequent itemsets from the previous iteration.
+        prev_frequent_itemsets (dict): Dictionary of frequent itemsets from previous iteration.
         k (int): The size of itemsets to generate.
 
-        Output:
-        set of frozensets: Generated candidate itemsets.
+        Returns:
+        set: Generated candidate itemsets.
         """
         candidates = set()
 
@@ -60,11 +58,11 @@ class Apriori:
         Prune candidates that contain non-frequent subsets.
 
         Parameters:
-        candidates (set of frozensets): Candidate itemsets to be pruned.
-        prev_frequent_itemsets (set of frozensets): Previous frequent itemsets for pruning reference.
+        candidates (set): Candidate itemsets to be pruned.
+        prev_frequent_itemsets (dict): Previous frequent itemsets for reference.
 
-        Output:
-        set of frozensets: Pruned candidate itemsets.
+        Returns:
+        set: Pruned candidate itemsets.
         """
         pruned_candidates = set()
 
@@ -89,11 +87,11 @@ class Apriori:
         Count the support of each candidate itemset in the transactions.
 
         Parameters:
-        transactions (list of sets): Each set represents a transaction containing items.
-        candidates (set of frozensets): Candidate itemsets whose support needs to be counted.
+        transactions (list): List of transaction sets.
+        candidates (set): Set of candidate itemsets.
 
-        Output:
-        dict: Dictionary mapping candidate itemsets to their support counts.
+        Returns:
+        dict: Dictionary mapping candidate itemsets to their absolute support counts.
         """
         support_counts = {itemset: 0 for itemset in candidates}
 
@@ -102,49 +100,37 @@ class Apriori:
                 if itemset.issubset(transaction):
                     support_counts[itemset] += 1
 
-        # Convert counts to support values (0-1 range)
-        return {itemset: count / self.transaction_count for itemset, count in support_counts.items()}
+        # Return the raw counts (not divided by transaction count)
+        return support_counts
 
-    def eliminate_infrequent(self, candidates, candidates_support):
+    def eliminate_infrequent(self, candidates_support):
         """
         Eliminate candidates that do not meet the minimum support threshold.
 
         Parameters:
-        candidates (dict): Dictionary mapping itemsets to their support counts.
+        candidates_support (dict): Dictionary mapping itemsets to their support counts.
 
-        Output:
+        Returns:
         dict: Dictionary of itemsets that meet the support threshold.
         """
         # Create a new dictionary to store frequent itemsets
         frequent_itemsets = {}
 
-        # Iterate through each candidate and its support value
-        for itemset, support in candidates_support.items():
-            # Check if the support meets the minimum threshold
-            if support >= self.min_support:
+        # Iterate through each candidate and its support count
+        for itemset, count in candidates_support.items():
+            # Check if the count meets the minimum threshold
+            if count >= self.min_support:
                 # If it does, add it to the frequent itemsets
-                frequent_itemsets[itemset] = support
+                frequent_itemsets[itemset] = count
 
         return frequent_itemsets
 
     def find_frequent_itemsets(self, transactions):
         """
-        Iteratively find frequent itemsets using the Apriori algorithm steps.
+        Iteratively find frequent itemsets using the Apriori algorithm.
 
         Parameters:
-        transactions (list of sets): Each set represents a transaction containing items.
-
-        Output:
-        None (Updates self.frequent_itemsets)
-
-        Example:
-        transactions = [
-            {"milk", "bread", "nuts", "apple"},
-            {"milk", "bread", "nuts"},
-            {"milk", "bread"},
-            {"milk", "bread", "apple"},
-            {"bread", "apple"}
-        ]
+        transactions (list): List of transaction sets.
         """
         self.transaction_count = len(transactions)
 
@@ -159,9 +145,6 @@ class Apriori:
             for itemset in candidates_1:
                 if itemset.issubset(transaction):
                     candidates_1[itemset] += 1
-
-        # Convert counts to support values
-        candidates_1 = {itemset: count / self.transaction_count for itemset, count in candidates_1.items()}
 
         # Filter by minimum support to get frequent 1-itemsets
         self.frequent_itemsets[1] = self.eliminate_infrequent(candidates_1)
@@ -196,11 +179,7 @@ class Apriori:
         """
         Generate association rules from the discovered frequent itemsets.
 
-        Parameters:
-        None (Uses self.frequent_itemsets)
-
-        Output:
-        None (Updates self.rules)
+        Updates self.rules with generated rules as tuples (antecedent, consequent, confidence)
         """
         self.rules = []
 
@@ -209,19 +188,18 @@ class Apriori:
             if k < 2:
                 continue
 
-            for itemset, support in self.frequent_itemsets[k].items():
+            for itemset, count in self.frequent_itemsets[k].items():
                 # Generate all non-empty proper subsets as potential antecedents
                 for i in range(1, k):
                     for antecedent in self._get_subsets(itemset, i):
                         consequent = itemset - antecedent
 
                         # Calculate confidence
-                        antecedent_support = self._find_support(antecedent)
-                        confidence = support / antecedent_support
+                        antecedent_count = self._find_support(antecedent)
+                        confidence = count / antecedent_count if antecedent_count > 0 else 0
 
                         if confidence >= self.min_confidence:
                             self.rules.append((antecedent, consequent, confidence))
-
 
     def _get_subsets(self, itemset, size):
         """
@@ -237,35 +215,29 @@ class Apriori:
         from itertools import combinations
         return [frozenset(subset) for subset in combinations(itemset, size)]
 
-
     def _find_support(self, itemset):
         """
-        Find the support of an itemset from stored frequent itemsets.
+        Find the support count of an itemset from stored frequent itemsets.
 
         Parameters:
         itemset (frozenset): The itemset to find support for.
 
         Returns:
-        float: Support of the itemset.
+        int: Support count of the itemset.
         """
         k = len(itemset)
         return self.frequent_itemsets[k][itemset] if itemset in self.frequent_itemsets[k] else 0
-
 
     def run(self, transactions):
         """
         Execute the Apriori algorithm: find frequent itemsets and generate rules.
 
         Parameters:
-        transactions (list of sets): List of transactions containing itemsets.
+        transactions (list): List of transactions.
 
-        Output:
+        Returns:
         tuple: (frequent_itemsets, rules)
         """
-        # self.find_frequent_itemsets(transactions)
-        # self.generate_rules()
-        # return self.frequent_itemsets, self.rules
-
         # Convert transactions to sets if they aren't already
         transactions = [set(t) if not isinstance(t, set) else t for t in transactions]
 
@@ -307,6 +279,7 @@ def load_transactions_from_file(filename):
     transactions = list(transaction_dict.values())
     return transactions
 
+
 if __name__ == "__main__":
     # Load transactions from file
     transactions = load_transactions_from_file('small.txt')
@@ -317,8 +290,8 @@ if __name__ == "__main__":
     for i, transaction in enumerate(transactions[:3]):
         print(f"  Transaction {i}: {transaction}")
 
-    # Run Apriori with reasonable thresholds for this dataset
-    min_support = 0.3  # 30% of transactions
+    # Run Apriori with absolute support count
+    min_support = 80  # Items must appear in at least 80 transactions
     min_confidence = 0.7  # 70% confidence in rules
 
     apriori = Apriori(min_support, min_confidence)
@@ -330,8 +303,10 @@ if __name__ == "__main__":
         print(f"  {k}-itemsets: {len(itemsets)}")
         # Print a few examples
         examples = list(itemsets.items())[:3]
-        for itemset, support in examples:
-            print(f"    {itemset} (support: {support:.3f})")
+        for itemset, count in examples:
+            # Calculate support percentage for reference
+            support_percentage = count / len(transactions)
+            print(f"    {itemset} (count: {count}, support: {support_percentage:.3f})")
 
     print("\nAssociation Rules (top 5):")
     # Sort rules by confidence
