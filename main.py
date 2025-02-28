@@ -596,6 +596,85 @@ class Apriori:
         return fig1
 
 
+def print_summary_statistics(apriori, transactions, min_support, min_confidence, filename):
+    """
+    Print comprehensive summary statistics for the Apriori algorithm run.
+
+    Parameters:
+    apriori (Apriori): The Apriori object after running the algorithm
+    transactions (list): List of transaction sets
+    min_support (int): Minimum support threshold used
+    min_confidence (float): Minimum confidence threshold used
+    filename (str): Name of the input file
+    """
+    # Calculate basic dataset statistics
+    unique_items = set()
+    max_transaction_length = 0
+
+    for transaction in transactions:
+        unique_items.update(transaction)
+        max_transaction_length = max(max_transaction_length, len(transaction))
+
+    # Calculate minimum support percentage
+    min_support_pct = (min_support / len(transactions)) * 100
+
+    # Calculate frequent itemset statistics
+    total_frequent_itemsets = sum(len(itemsets) for itemsets in apriori.frequent_itemsets.values())
+
+    # Find highest confidence and lift rules
+    highest_confidence_rule = None
+    highest_lift_rule = None
+    max_confidence = 0
+    max_lift = 0
+
+    for antecedent, consequent, confidence in apriori.rules:
+        # Calculate lift for this rule
+        antecedent_support = apriori._find_support(antecedent) / apriori.transaction_count
+        consequent_support = apriori._find_support(consequent) / apriori.transaction_count
+        rule_support = apriori._find_support(antecedent.union(consequent)) / apriori.transaction_count
+        lift = rule_support / (
+                    antecedent_support * consequent_support) if antecedent_support * consequent_support > 0 else 0
+
+        if confidence > max_confidence:
+            max_confidence = confidence
+            highest_confidence_rule = (antecedent, consequent, confidence, lift)
+
+        if lift > max_lift:
+            max_lift = lift
+            highest_lift_rule = (antecedent, consequent, confidence, lift)
+
+    # Print summary statistics
+    print("\n" + "=" * 50)
+    print("APRIORI ALGORITHM SUMMARY")
+    print("=" * 50)
+    print(f"minsuppc: {min_support_pct:.2f}%")
+    print(f"minconf: {min_confidence}")
+    print(f"input file: {filename}")
+    print(f"Number of items: {len(unique_items)}")
+    print(f"Number of transactions: {len(transactions)}")
+    print(f"The length of the longest transaction: {max_transaction_length}")
+
+    print("\nFrequent Itemsets:")
+    for k, itemsets in apriori.frequent_itemsets.items():
+        print(f"Number of frequent {k}-itemsets: {len(itemsets)}")
+
+    print(f"Total number of frequent itemsets: {total_frequent_itemsets}")
+    print(f"Number of high-confidence rules: {len(apriori.rules)}")
+
+    if highest_confidence_rule:
+        antecedent, consequent, confidence, lift = highest_confidence_rule
+        print(f"\nThe rule with the highest confidence ({confidence:.4f}):")
+        print(f"  {{{', '.join(map(str, antecedent))}}} => {{{', '.join(map(str, consequent))}}}")
+
+    if highest_lift_rule:
+        antecedent, consequent, confidence, lift = highest_lift_rule
+        print(f"\nThe rule with the highest lift ({lift:.4f}):")
+        print(f"  {{{', '.join(map(str, antecedent))}}} => {{{', '.join(map(str, consequent))}}}")
+
+    print(f"\nTime in seconds to find the frequent itemsets: {apriori.execution_times['frequent_itemsets']:.4f}")
+    print(f"Time in seconds to find the confident rules: {apriori.execution_times['rule_generation']:.4f}")
+    print("=" * 50)
+
 def load_transactions_from_file(filename):
     """
     Load transaction data from a file with pairs in the format:
@@ -629,186 +708,255 @@ def load_transactions_from_file(filename):
     transactions = list(transaction_dict.values())
     return transactions
 
-
-# Usage with the provided dataset
 if __name__ == "__main__":
     # Load transactions from file
-    transactions = load_transactions_from_file('small.txt')
+    filename = 'small.txt'
+    transactions = load_transactions_from_file(filename)
 
     # Print some transaction statistics
     print(f"Number of transactions: {len(transactions)}")
-    print(f"Sample transactions (first 3):")
-    for i, transaction in enumerate(transactions[:3]):
-        print(f"  Transaction {i}: {transaction}")
+    transaction_count = len(transactions)
 
-    # Run Apriori with absolute support count
-    min_support = 80  # Items must appear in at least 80 transactions
-    min_confidence = 0.8  # 70% confidence in rules
+    # Define arrays of support counts and confidence levels to test
+    # You can customize these arrays with your desired values
+    support_values = [50, 75, 100, 125, 150]
+    confidence_values = [0.6, 0.7, 0.8, 0.9]
 
-    print("\nRunning Apriori algorithm...")
-    start_time = time.time()
+    # Create a structure to store results for all combinations
+    all_results = []
 
-    apriori = Apriori(min_support, min_confidence)
-    frequent_itemsets, rules, execution_times = apriori.run(transactions)
+    print("\nRunning Apriori algorithm with multiple parameter combinations...")
+    print(f"Support values: {support_values}")
+    print(f"Confidence values: {confidence_values}")
+    print(f"Total combinations to run: {len(support_values) * len(confidence_values)}")
 
-    total_time = time.time() - start_time
-    print(f"Total execution time: {total_time:.2f} seconds")
+    # Loop through all combinations of support and confidence
+    for min_confidence in confidence_values:
+        for min_support in support_values:
+            # Calculate support percentage for reporting
+            min_support_pct = (min_support / transaction_count) * 100
 
-    # Print timing results
-    print("\nExecution Time Breakdown:")
-    print(f"  Finding frequent itemsets: {execution_times['frequent_itemsets']:.2f} seconds")
-    print(f"  Candidate generation: {execution_times['candidate_generation']:.2f} seconds")
-    print(f"  Support counting: {execution_times['support_counting']:.2f} seconds")
-    print(f"  Rule generation: {execution_times['rule_generation']:.2f} seconds")
+            print(
+                f"\nRunning with min_support = {min_support} ({min_support_pct:.2f}%) and min_confidence = {min_confidence}")
+            start_time = time.time()
 
-    # Print results
-    print("\nFrequent Itemsets:")
-    for k, itemsets in frequent_itemsets.items():
-        print(f"  {k}-itemsets: {len(itemsets)}")
-        # Print a few examples
-        examples = list(itemsets.items())[:3]
-        for itemset, count in examples:
-            # Calculate support percentage for reference
-            support_percentage = count / len(transactions)
-            print(f"    {itemset} (count: {count}, support: {support_percentage:.3f})")
+            # Run the algorithm
+            apriori = Apriori(min_support, min_confidence)
+            frequent_itemsets, rules, execution_times = apriori.run(transactions)
 
-    print("\nAssociation Rules (top 5):")
-    # Sort rules by confidence
-    rules.sort(key=lambda x: x[2], reverse=True)
-    for antecedent, consequent, confidence in rules[:5]:
-        print(f"  {antecedent} => {consequent} (confidence: {confidence:.3f})")
+            total_time = time.time() - start_time
 
-    # Visualize the results
+            # Calculate total number of frequent itemsets
+            total_frequent = sum(len(itemsets) for itemsets in frequent_itemsets.items())
+
+            # Find highest confidence and lift rules if rules exist
+            highest_confidence_rule = None
+            highest_lift_rule = None
+            max_confidence = 0
+            max_lift = 0
+
+            if rules:
+                for antecedent, consequent, confidence in rules:
+                    # Calculate lift for this rule
+                    antecedent_support = apriori._find_support(antecedent) / transaction_count
+                    consequent_support = apriori._find_support(consequent) / transaction_count
+                    rule_support = apriori._find_support(antecedent.union(consequent)) / transaction_count
+                    lift = rule_support / (
+                                antecedent_support * consequent_support) if antecedent_support * consequent_support > 0 else 0
+
+                    if confidence > max_confidence:
+                        max_confidence = confidence
+                        highest_confidence_rule = (antecedent, consequent, confidence, lift)
+
+                    if lift > max_lift:
+                        max_lift = lift
+                        highest_lift_rule = (antecedent, consequent, confidence, lift)
+
+            # Store results in a structured way
+            result = {
+                'min_support': min_support,
+                'min_support_pct': min_support_pct,
+                'min_confidence': min_confidence,
+                'total_time': total_time,
+                'frequent_itemsets_time': execution_times['frequent_itemsets'],
+                'rule_generation_time': execution_times['rule_generation'],
+                'frequent_itemsets_count': total_frequent,
+                'rules_count': len(rules),
+                'max_confidence': max_confidence if rules else 0,
+                'max_lift': max_lift if rules else 0,
+                'itemset_counts': {k: len(v) for k, v in frequent_itemsets.items()}
+            }
+
+            all_results.append(result)
+
+            # Print a brief summary for this run
+            print(f"  Found {total_frequent} frequent itemsets and {len(rules)} rules")
+            print(f"  Total time: {total_time:.2f} seconds")
+
+            # Run the full summary once for each combination if desired
+            # Uncomment this line if you want the detailed summary for each run
+            # print_summary_statistics(apriori, transactions, min_support, min_confidence, filename)
+
+    # Print the comprehensive results table
+    print("\n" + "=" * 80)
+    print("RESULTS SUMMARY FOR ALL PARAMETER COMBINATIONS")
+    print("=" * 80)
+    print(
+        f"{'Support':<8} {'Support %':<10} {'Conf':<6} {'Time(s)':<8} {'Itemsets':<8} {'Rules':<8} {'Max Conf':<8} {'Max Lift':<8}")
+    print("-" * 80)
+
+    # Sort by confidence level first, then by support count
+    sorted_results = sorted(all_results, key=lambda x: (x['min_confidence'], x['min_support']))
+
+    for result in sorted_results:
+        print(f"{result['min_support']:<8} {result['min_support_pct']:.2f}%{' ' * 5} "
+              f"{result['min_confidence']:.2f}{' ' * 2} "
+              f"{result['total_time']:.2f}{' ' * 3} "
+              f"{result['frequent_itemsets_count']:<8} "
+              f"{result['rules_count']:<8} "
+              f"{result['max_confidence']:.4f}{' ' * 2} "
+              f"{result['max_lift']:.4f}")
+
+    # Create visualizations for the multi-parameter results
     try:
-        # Create visualizations
-        itemset_dist_fig = apriori.visualize_itemset_distribution()
-        frequent_itemsets_fig = apriori.visualize_frequent_itemsets(top_n=15)
-        rules_fig = apriori.visualize_association_rules(top_n=15)
+        import pandas as pd
+        import plotly.express as px
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
 
-        # Create execution time visualizations
-        time_figs = apriori.visualize_execution_time()
-        if isinstance(time_figs, tuple):
-            time_overview_fig, time_detail_fig = time_figs
-        else:
-            time_overview_fig = time_figs
-            time_detail_fig = None
+        # Convert results to DataFrame for easier visualization
+        results_df = pd.DataFrame(all_results)
 
-        # Show the figures
-        itemset_dist_fig.show()
-        frequent_itemsets_fig.show()
-        rules_fig.show()
-        time_overview_fig.show()
-        if time_detail_fig:
-            time_detail_fig.show()
+        # Create a heatmap of frequent itemset counts
+        fig1 = px.density_heatmap(
+            results_df,
+            x='min_support',
+            y='min_confidence',
+            z='frequent_itemsets_count',
+            title='Number of Frequent Itemsets by Support and Confidence',
+            labels={'min_support': 'Minimum Support Count',
+                    'min_confidence': 'Minimum Confidence',
+                    'frequent_itemsets_count': 'Number of Frequent Itemsets'}
+        )
 
-        # Save the figures
-        itemset_dist_fig.write_html("itemset_distribution.html")
-        frequent_itemsets_fig.write_html("frequent_itemsets.html")
-        rules_fig.write_html("association_rules.html")
-        time_overview_fig.write_html("execution_time_overview.html")
-        if time_detail_fig:
-            time_detail_fig.write_html("execution_time_by_iteration.html")
+        # Create a heatmap of rule counts
+        fig2 = px.density_heatmap(
+            results_df,
+            x='min_support',
+            y='min_confidence',
+            z='rules_count',
+            title='Number of Association Rules by Support and Confidence',
+            labels={'min_support': 'Minimum Support Count',
+                    'min_confidence': 'Minimum Confidence',
+                    'rules_count': 'Number of Rules'}
+        )
 
-        print("\nVisualization HTML files have been created.")
-    except Exception as e:
-        print(f"\nError creating visualizations: {e}")
-        print("Make sure you have Plotly and pandas installed:")
-        print("pip install plotly pandas")
+        # Create a heatmap of execution times
+        fig3 = px.density_heatmap(
+            results_df,
+            x='min_support',
+            y='min_confidence',
+            z='total_time',
+            title='Execution Time by Support and Confidence',
+            labels={'min_support': 'Minimum Support Count',
+                    'min_confidence': 'Minimum Confidence',
+                    'total_time': 'Execution Time (s)'}
+        )
 
-    # Benchmark with different support thresholds
-    print("\nBenchmarking with different support thresholds...")
-    support_values = [50, 75, 100, 125, 150, 200]
-    benchmark_results = []
+        # Create a 3D surface plot for a more visual representation
+        fig4 = go.Figure(data=[
+            go.Surface(
+                z=results_df.pivot_table(index='min_confidence', columns='min_support',
+                                         values='frequent_itemsets_count').values,
+                x=sorted(results_df['min_support'].unique()),
+                y=sorted(results_df['min_confidence'].unique()),
+                colorscale='Viridis',
+                colorbar=dict(title='Count')
+            )
+        ])
 
-    for min_support in support_values:
-        print(f"  Running with min_support = {min_support}...")
-        start_time = time.time()
-
-        apriori = Apriori(min_support, min_confidence)
-        frequent_itemsets, rules, execution_times = apriori.run(transactions)
-
-        total_time = time.time() - start_time
-
-        # Record results
-        benchmark_results.append({
-            'min_support': min_support,
-            'total_time': total_time,
-            'frequent_itemsets_count': sum(len(itemsets) for itemsets in frequent_itemsets.values()),
-            'rules_count': len(rules)
-        })
-
-    # Print benchmark results
-    print("\nBenchmark Results:")
-    print(f"{'Support':<10} {'Time (s)':<10} {'Itemsets':<10} {'Rules':<10}")
-    print("-" * 40)
-    for result in benchmark_results:
-        print(f"{result['min_support']:<10} {result['total_time']:.2f}s{' ' * 4} "
-              f"{result['frequent_itemsets_count']:<10} {result['rules_count']:<10}")
-
-    # Visualize benchmark results
-    try:
-        # Create dataframe
-        df = pd.DataFrame(benchmark_results)
-
-        # Create figure
-        fig = go.Figure()
-
-        # Add bar for time
-        fig.add_trace(go.Bar(
-            x=df['min_support'],
-            y=df['total_time'],
-            name='Execution Time (s)',
-            marker_color='rgb(55, 83, 109)'
-        ))
-
-        # Add lines for counts
-        fig.add_trace(go.Scatter(
-            x=df['min_support'],
-            y=df['frequent_itemsets_count'],
-            mode='lines+markers',
-            name='Frequent Itemsets',
-            yaxis='y2',
-            marker_color='rgb(219, 64, 82)',
-            line=dict(width=3)
-        ))
-
-        fig.add_trace(go.Scatter(
-            x=df['min_support'],
-            y=df['rules_count'],
-            mode='lines+markers',
-            name='Association Rules',
-            yaxis='y2',
-            marker_color='rgb(50, 171, 96)',
-            line=dict(width=3)
-        ))
-
-        # Update layout for dual y-axis
-        fig.update_layout(
-            title='Performance vs. Support Threshold',
-            xaxis=dict(
-                title='Minimum Support Threshold',
-                tickmode='array',
-                tickvals=df['min_support']
-            ),
-            yaxis=dict(
-                title='Time (seconds)',
-                side='left'
-            ),
-            yaxis2=dict(
-                title='Count',
-                side='right',
-                overlaying='y',
-                rangemode='tozero'
-            ),
-            legend=dict(
-                x=0.1,
-                y=1.1,
-                orientation='h'
+        fig4.update_layout(
+            title='Frequent Itemsets (3D View)',
+            scene=dict(
+                xaxis_title='Support Count',
+                yaxis_title='Confidence',
+                zaxis_title='Number of Frequent Itemsets'
             )
         )
 
-        fig.show()
-        fig.write_html("benchmark_results.html")
-        print("Benchmark visualization has been created.")
+        # Show the figures
+        fig1.show()
+        fig2.show()
+        fig3.show()
+        fig4.show()
+
+        # Save the figures
+        fig1.write_html("itemsets_by_params_heatmap.html")
+        fig2.write_html("rules_by_params_heatmap.html")
+        fig3.write_html("time_by_params_heatmap.html")
+        fig4.write_html("itemsets_3d_surface.html")
+
+        print("\nVisualization HTML files have been created.")
+
+        # Optionally: Create a detailed line chart for each confidence level
+        # This shows how itemset count and rule count change with support for each confidence level
+        fig5 = make_subplots(rows=1, cols=2,
+                             subplot_titles=("Frequent Itemsets by Support", "Association Rules by Support"),
+                             shared_xaxes=True)
+
+        for conf in sorted(results_df['min_confidence'].unique()):
+            conf_data = results_df[results_df['min_confidence'] == conf]
+
+            # Add itemsets trace
+            fig5.add_trace(
+                go.Scatter(
+                    x=conf_data['min_support'],
+                    y=conf_data['frequent_itemsets_count'],
+                    mode='lines+markers',
+                    name=f'Conf={conf} (Itemsets)',
+                    line=dict(width=2)
+                ),
+                row=1, col=1
+            )
+
+            # Add rules trace
+            fig5.add_trace(
+                go.Scatter(
+                    x=conf_data['min_support'],
+                    y=conf_data['rules_count'],
+                    mode='lines+markers',
+                    name=f'Conf={conf} (Rules)',
+                    line=dict(width=2, dash='dot')
+                ),
+                row=1, col=2
+            )
+
+        fig5.update_layout(
+            title='Effect of Support and Confidence on Results',
+            xaxis_title='Minimum Support Count',
+            yaxis_title='Count'
+        )
+
+        fig5.show()
+        fig5.write_html("support_confidence_effects.html")
+
     except Exception as e:
-        print(f"\nError creating benchmark visualization: {e}")
+        print(f"\nError creating multi-parameter visualizations: {e}")
+        print("Make sure you have Plotly and pandas installed:")
+        print("pip install plotly pandas")
+
+    # Run the detailed summary on the best parameter combination
+    # (you can define "best" according to your criteria)
+    print("\nShowing detailed summary for the parameter combination with the most rules:")
+    best_result = max(all_results, key=lambda x: x['rules_count'])
+    best_support = best_result['min_support']
+    best_confidence = best_result['min_confidence']
+
+    print(f"Best parameters: min_support={best_support}, min_confidence={best_confidence}")
+
+    # Run one more time with the best parameters to generate detailed summary
+    apriori = Apriori(best_support, best_confidence)
+    frequent_itemsets, rules, execution_times = apriori.run(transactions)
+
+    # Print detailed summary for the best parameter combination
+    print_summary_statistics(apriori, transactions, best_support, best_confidence, filename)
