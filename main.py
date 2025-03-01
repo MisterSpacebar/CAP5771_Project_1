@@ -708,6 +708,143 @@ def load_transactions_from_file(filename):
     transactions = list(transaction_dict.values())
     return transactions
 
+
+def write_itemsets_to_file(apriori, filename="items.txt"):
+    """
+    Write frequent itemsets to a text file in the format:
+    ITEMSETS|SUPPORT_COUNT|SUPPORT
+
+    Parameters:
+    apriori (Apriori): The Apriori object after running the algorithm
+    filename (str): Name of the output file
+    """
+    with open(filename, 'w') as file:
+        for k, itemsets in apriori.frequent_itemsets.items():
+            for itemset, count in itemsets.items():
+                # Convert itemset to space-delimited string
+                items_str = ' '.join(map(str, itemset))
+
+                # Calculate support as a fraction
+                support = count / apriori.transaction_count
+
+                # Write to file in the specified format
+                file.write(f"{items_str}|{count}|{support:.6f}\n")
+
+    print(f"Frequent itemsets written to {filename}")
+
+
+def write_rules_to_file(apriori, filename="rules.txt"):
+    """
+    Write association rules to a text file in the format:
+    LHS|RHS|SUPPORT_COUNT|SUPPORT|CONFIDENCE|LIFT
+
+    Parameters:
+    apriori (Apriori): The Apriori object after running the algorithm
+    filename (str): Name of the output file
+    """
+    with open(filename, 'w') as file:
+        for antecedent, consequent, confidence in apriori.rules:
+            # Convert itemsets to space-delimited strings
+            lhs_str = ' '.join(map(str, antecedent))
+            rhs_str = ' '.join(map(str, consequent))
+
+            # Calculate support counts and support
+            rule_itemset = antecedent.union(consequent)
+            support_count = apriori._find_support(rule_itemset)
+            support = support_count / apriori.transaction_count
+
+            # Calculate lift
+            antecedent_support = apriori._find_support(antecedent) / apriori.transaction_count
+            consequent_support = apriori._find_support(consequent) / apriori.transaction_count
+            lift = confidence / consequent_support if consequent_support > 0 else 0
+
+            # Write to file in the specified format
+            file.write(f"{lhs_str}|{rhs_str}|{support_count}|{support:.6f}|{confidence:.6f}|{lift:.6f}\n")
+
+    print(f"Association rules written to {filename}")
+
+
+def write_info_to_file(apriori, transactions, min_support, min_confidence, input_filename, filename="info.txt"):
+    """
+    Write summary information to a text file.
+
+    Parameters:
+    apriori (Apriori): The Apriori object after running the algorithm
+    transactions (list): List of transaction sets
+    min_support (int): Minimum support threshold used
+    min_confidence (float): Minimum confidence threshold used
+    input_filename (str): Name of the input file
+    filename (str): Name of the output file
+    """
+    # Calculate basic dataset statistics
+    unique_items = set()
+    max_transaction_length = 0
+
+    for transaction in transactions:
+        unique_items.update(transaction)
+        max_transaction_length = max(max_transaction_length, len(transaction))
+
+    # Calculate minimum support percentage
+    min_support_pct = (min_support / len(transactions)) * 100
+
+    # Find highest confidence and lift rules
+    highest_confidence_rule = None
+    highest_lift_rule = None
+    max_confidence = 0
+    max_lift = 0
+
+    for antecedent, consequent, confidence in apriori.rules:
+        # Calculate lift for this rule
+        antecedent_support = apriori._find_support(antecedent) / apriori.transaction_count
+        consequent_support = apriori._find_support(consequent) / apriori.transaction_count
+        lift = confidence / consequent_support if consequent_support > 0 else 0
+
+        if confidence > max_confidence:
+            max_confidence = confidence
+            highest_confidence_rule = (antecedent, consequent, confidence, lift)
+
+        if lift > max_lift:
+            max_lift = lift
+            highest_lift_rule = (antecedent, consequent, confidence, lift)
+
+    # Write to the info file
+    with open(filename, 'w') as file:
+        file.write(f"minsuppc: {min_support_pct:.2f}\n")
+        file.write(f"minconf: {min_confidence}\n")
+        file.write(f"input file: {input_filename}\n")
+        file.write(f"Number of items: {len(unique_items)}\n")
+        file.write(f"Number of transactions: {len(transactions)}\n")
+        file.write(f"The length of the longest transaction: {max_transaction_length}\n")
+
+        # Write frequent itemset counts by size
+        total_frequent_itemsets = 0
+        for k, itemsets in apriori.frequent_itemsets.items():
+            count = len(itemsets)
+            total_frequent_itemsets += count
+            file.write(f"Number of frequent {k}-itemsets: {count}\n")
+
+        file.write(f"Total number of frequent itemsets: {total_frequent_itemsets}\n")
+        file.write(f"Number of high-confidence rules: {len(apriori.rules)}\n")
+
+        # Write highest confidence rule
+        if highest_confidence_rule:
+            antecedent, consequent, confidence, lift = highest_confidence_rule
+            file.write(
+                f"The rule with the highest confidence: {{{', '.join(map(str, antecedent))}}} => {{{', '.join(map(str, consequent))}}}\n")
+
+        # Write highest lift rule
+        if highest_lift_rule:
+            antecedent, consequent, confidence, lift = highest_lift_rule
+            file.write(
+                f"The rule with the highest lift: {{{', '.join(map(str, antecedent))}}} => {{{', '.join(map(str, consequent))}}}\n")
+
+        # Write timing information
+        file.write(
+            f"Time in seconds to find the frequent itemsets: {apriori.execution_times['frequent_itemsets']:.4f}\n")
+        file.write(f"Time in seconds to find the confident rules: {apriori.execution_times['rule_generation']:.4f}\n")
+
+    print(f"Summary information written to {filename}")
+
 if __name__ == "__main__":
     # Load transactions from file
     filename = 'small.txt'
@@ -960,3 +1097,10 @@ if __name__ == "__main__":
 
     # Print detailed summary for the best parameter combination
     print_summary_statistics(apriori, transactions, best_support, best_confidence, filename)
+
+    # Save results to files
+    write_itemsets_to_file(apriori, "items.txt")
+    write_rules_to_file(apriori, "rules.txt")
+    write_info_to_file(apriori, transactions, min_support, min_confidence, filename, "info.txt")
+
+    print("\nResults have been written to files: items.txt, rules.txt, and info.txt")
